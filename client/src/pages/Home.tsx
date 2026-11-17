@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { startLogin } from "@/const";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { trpc } from "@/lib/trpc";
 import { cn } from "@/lib/utils";
@@ -85,10 +84,6 @@ function MetricCard({ label, value, detail, icon: Icon, tone = "indigo" }: { lab
 }
 function SectionHeading({ eyebrow, title, description, action }: { eyebrow?: string; title: string; description?: string; action?: React.ReactNode }) {
   return <div className="mb-5 flex items-end justify-between gap-4"><div>{eyebrow && <p className="mb-1 text-[11px] font-bold uppercase tracking-[0.16em] text-indigo-500">{eyebrow}</p>}<h2 className="text-lg font-semibold tracking-tight text-slate-900">{title}</h2>{description && <p className="mt-1 text-sm text-slate-500">{description}</p>}</div>{action}</div>;
-}
-
-function LoginScreen() {
-  return <div className="min-h-screen bg-[#f7f9fc] px-6 py-10"><div className="mx-auto flex min-h-[calc(100vh-5rem)] max-w-6xl items-center justify-center"><div className="grid w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_20px_80px_rgba(15,23,42,0.09)] lg:grid-cols-[1.05fr_0.95fr]"><div className="relative overflow-hidden bg-[#101a38] p-8 text-white sm:p-12"><div className="absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/10" /><div className="absolute -bottom-36 -left-16 h-80 w-80 rounded-full border border-indigo-300/10" /><div className="relative flex h-full flex-col justify-between"><div><div className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-500 shadow-lg shadow-indigo-950/40"><Check className="h-5 w-5" /></div><div><p className="font-semibold tracking-tight">smart curriculum</p><p className="text-[10px] uppercase tracking-[0.2em] text-indigo-200">campus operations</p></div></div><div className="mt-24 max-w-md"><p className="mb-4 text-xs font-semibold uppercase tracking-[0.22em] text-indigo-300">Activity & Attendance Management System</p><h1 className="text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl">Keep the whole campus on track.</h1><p className="mt-5 max-w-sm text-sm leading-6 text-slate-300">One calm workspace for attendance, activities, announcements, and the small details that keep a semester moving.</p></div></div><div className="mt-20 flex items-center gap-3 text-xs text-slate-400"><ShieldCheck className="h-4 w-4 text-emerald-300" /> Secure role-based access for every campus team</div></div></div><div className="flex items-center p-8 sm:p-12"><div className="w-full max-w-sm"><div className="mb-8"><p className="text-xs font-bold uppercase tracking-[0.18em] text-indigo-500">Smart Curriculum demo</p><h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-900">Sign in to your workspace</h2><p className="mt-2 text-sm leading-6 text-slate-500">Use your Manus account to open the dashboard. Your assigned role controls what you can view and manage.</p></div><Button className="h-11 w-full bg-indigo-600 text-white shadow-lg shadow-indigo-200 hover:bg-indigo-700" onClick={() => startLogin()}>Continue with Manus <ChevronRight className="h-4 w-4" /></Button><div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs leading-5 text-slate-500"><p className="font-semibold text-slate-700">Demonstration environment</p><p className="mt-1">Sample academic records are provided after sign-in. No email or SMS notifications are configured.</p></div></div></div></div></div></div>;
 }
 
 function Sidebar({ role, active, open, onClose }: { role: Role; active: string; open: boolean; onClose: () => void }) {
@@ -177,7 +172,7 @@ export default function Home() {
   const auth = useAuth();
   const overview = trpc.dashboard.overview.useQuery(undefined, { enabled: Boolean(auth.user), retry: 1 });
   if (auth.loading) return <div className="grid min-h-screen place-items-center bg-[#f7f9fc]"><div className="text-center"><div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" /><p className="mt-4 text-sm text-slate-500">Opening your workspace…</p></div></div>;
-  if (!auth.user) return <LoginScreen />;
+  if (!auth.user) return <div className="grid min-h-screen place-items-center bg-[#f7f9fc]"><p className="text-sm text-slate-500">The demo workspace is not configured.</p></div>;
   if (overview.isLoading) return <div className="grid min-h-screen place-items-center bg-[#f7f9fc]"><div className="text-center"><div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" /><p className="mt-4 text-sm text-slate-500">Preparing live campus data…</p></div></div>;
   if (overview.error || !overview.data) return <div className="grid min-h-screen place-items-center bg-[#f7f9fc] p-6"><Card className="max-w-md border-rose-100"><CardContent className="p-8 text-center"><FileText className="mx-auto h-8 w-8 text-rose-500" /><h2 className="mt-4 font-semibold text-slate-900">We couldn’t load your workspace.</h2><p className="mt-2 text-sm leading-6 text-slate-500">{overview.error?.message ?? "The database is not ready yet."}</p><Button className="mt-5 bg-indigo-600 text-white hover:bg-indigo-700" onClick={() => overview.refetch()}>Try again</Button></CardContent></Card></div>;
   const role = (auth.user.role ?? "student") as Role;

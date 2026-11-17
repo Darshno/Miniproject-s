@@ -1,5 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
 import type { User } from "../../drizzle/schema";
+import * as db from "../db";
 import { sdk } from "./sdk";
 
 export type TrpcContext = {
@@ -18,6 +19,11 @@ export async function createContext(
   } catch (error) {
     // Authentication is optional for public procedures.
     user = null;
+  }
+
+  if (!user && process.env.DEMO_MODE === "true") {
+    await db.ensureDemoData();
+    user = (await db.getUserByOpenId("demo-admin-001")) ?? null;
   }
 
   return {

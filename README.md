@@ -7,6 +7,11 @@ React / Express / tRPC / Drizzle starter, adapted from the Sandbox web-db-user t
 - `pnpm db:migrate`: apply checked-in migrations. `pnpm db:push`: generate and apply new schema changes.
 - `pnpm check` / `pnpm test`: types and application tests.
 
+For a demo deployment without Manus OAuth, set `DEMO_MODE=true`. The server
+then uses the seeded administrator account (`demo-admin-001`) for requests
+without a session. This mode is for demonstrations only and must not be used
+for a public production deployment.
+
 Start with the Webdev skill's default-template guide. Platform login, storage, payments and service contracts live in its shared references; read the relevant capability before extending its helper.
 
 `server/_core/publicConfig.ts` exposes only named public runtime values. Private keys stay server-side. The platform serves managed `/manus-storage/` assets; the application does not register a second proxy.
