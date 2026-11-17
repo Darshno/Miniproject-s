@@ -21,6 +21,131 @@ import { ENV } from "./_core/env";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
+export const isDemoMode = () => process.env.DEMO_MODE === "true";
+
+export const demoUser = {
+  id: 1,
+  openId: "demo-admin-001",
+  name: "Ananya Menon",
+  email: "ananya.admin@smartcurriculum.demo",
+  loginMethod: "demo",
+  role: "admin" as const,
+  createdAt: new Date("2025-01-01T00:00:00Z"),
+  updatedAt: new Date("2025-01-01T00:00:00Z"),
+  lastSignedIn: new Date(),
+};
+
+const demoActivities = [
+  ["Build with AI: Product Sprint", "Hackathon", "Innovation Lab", 60],
+  ["Designing for Accessibility", "Workshop", "Seminar Hall 2", 90],
+  ["Industry Connect: Cloud Careers", "Guest lecture", "Main Auditorium", 250],
+  ["Campus Coding League", "Competition", "Lab 3", 40],
+].map(([title, category, venue, capacity], index) => {
+  const startsAt = new Date(Date.now() + (index + 3) * 86400000);
+  return {
+    id: index + 1,
+    title,
+    description: "A sample campus activity available in the Smart Curriculum demo.",
+    category,
+    startsAt,
+    venue,
+    capacity,
+    registrationDeadline: new Date(startsAt.getTime() - 86400000),
+    status: "open",
+    registrations: index + 2,
+    registered: false,
+    availableSeats: Number(capacity) - index - 2,
+    department: "Computer Science & Engineering",
+  };
+});
+
+export function getDemoOverview() {
+  const subjects = [
+    { id: 1, name: "Data Structures", code: "CS201", conducted: 8, attended: 7, missed: 1, percentage: 87.5, required: 0, safeMisses: 1, status: "Safe" },
+    { id: 2, name: "Database Management", code: "CS202", conducted: 8, attended: 6, missed: 2, percentage: 75, required: 0, safeMisses: 0, status: "Safe" },
+    { id: 3, name: "Computer Networks", code: "CS203", conducted: 8, attended: 5, missed: 3, percentage: 62.5, required: 4, safeMisses: 0, status: "Low" },
+    { id: 4, name: "Operating Systems", code: "CS204", conducted: 8, attended: 6, missed: 2, percentage: 75, required: 0, safeMisses: 0, status: "Safe" },
+  ];
+  return {
+    user: { id: demoUser.id, name: demoUser.name, email: demoUser.email, role: demoUser.role },
+    policy: { threshold: 75, lateCountsAsPresent: true },
+    student: null, faculty: { id: 1, employeeCode: "DEMO-001" },
+    stats: { overallAttendance: 75, totalClasses: 32, attendedClasses: 24, upcomingActivities: demoActivities.length, belowThreshold: 1, students: 20, faculty: 3, subjects: subjects.length, sessions: 40, institutionAttendance: 78.4, facultyAverage: 78.4 },
+    subjects,
+    facultySubjects: subjects.map(subject => ({ ...subject, enrolled: 20, sessions: 8 })),
+    activities: demoActivities,
+    announcements: [{ id: 1, title: "Welcome to the Smart Curriculum demo", body: "This read-only workspace contains representative campus data.", audience: "all", publishedAt: new Date() }],
+    notifications: [],
+    trend: [74, 76, 73, 79, 77, 78].map((attendance, index) => ({ label: `W${index + 1}`, attendance })),
+  };
+}
+
+export function getDemoActivities(input?: { search?: string; category?: string }) {
+  return demoActivities.filter(item => (!input?.search || String(item.title).toLowerCase().includes(input.search.toLowerCase())) && (!input?.category || item.category === input.category));
+}
+
+const demoSubjects = [
+  { id: 1, name: "Data Structures", code: "CS201", departmentId: 1, credits: 4 },
+  { id: 2, name: "Database Management", code: "CS202", departmentId: 1, credits: 4 },
+  { id: 3, name: "Computer Networks", code: "CS203", departmentId: 1, credits: 3 },
+  { id: 4, name: "Operating Systems", code: "CS204", departmentId: 1, credits: 4 },
+];
+
+const demoStudents = Array.from({ length: 8 }, (_, index) => ({
+  id: index + 1,
+  userId: index + 10,
+  rollNumber: `SC24CSE${String(index + 1).padStart(3, "0")}`,
+  course: "B.Tech Computer Science",
+  year: 2,
+  departmentId: 1,
+  name: ["Aarav Nair", "Diya Joseph", "Kabir Singh", "Nisha Verma", "Arjun Das", "Ishita Roy", "Vihaan Kapoor", "Sana Khan"][index],
+}));
+
+export function getDemoAdminData() {
+  const faculty = [
+    { id: 1, userId: 2, employeeCode: "FAC-001", departmentId: 1, name: "Dr. Rohan Iyer" },
+    { id: 2, userId: 3, employeeCode: "FAC-002", departmentId: 1, name: "Prof. Meera Shah" },
+  ];
+  const departments = [
+    { id: 1, name: "Computer Science & Engineering", code: "CSE" },
+    { id: 2, name: "Electronics & Communication", code: "ECE" },
+    { id: 3, name: "Student Affairs", code: "SA" },
+  ];
+  const enrollments = demoStudents.flatMap(student => demoSubjects.slice(0, 3).map((subject, index) => ({
+    id: student.id * 10 + index,
+    studentId: student.id,
+    subjectId: subject.id,
+    subject,
+    faculty: faculty[index % faculty.length].name,
+    section: "A",
+  })));
+  const assignments = demoSubjects.map((subject, index) => ({
+    ...subject,
+    assignments: [{ id: index + 1, subjectId: subject.id, facultyId: faculty[index % faculty.length].id, section: "A", faculty: faculty[index % faculty.length].name }],
+  }));
+  return { students: demoStudents, faculty, departments, enrollments, assignments, subjects: demoSubjects };
+}
+
+export function getDemoAttendance() {
+  const sessions = demoSubjects.slice(0, 3).flatMap((subject, subjectIndex) =>
+    [0, 1].map(index => ({
+      id: subjectIndex * 2 + index + 1,
+      subjectId: subject.id,
+      subject: subject.name,
+      sessionDate: new Date(Date.now() - (index + subjectIndex + 1) * 86400000),
+      sessionTime: index ? "11:00:00" : "09:00:00",
+      record: { id: subjectIndex * 2 + index + 1, sessionId: subjectIndex * 2 + index + 1, studentId: 10, status: (index ? "present" : "late") as "present" | "absent" | "late" },
+    }))
+  );
+  const roster = demoStudents.map((student, index) => ({
+    studentId: student.id,
+    name: student.name,
+    rollNumber: student.rollNumber,
+    status: (index % 4 === 0 ? "late" : index % 5 === 0 ? "absent" : "present") as "present" | "absent" | "late",
+  }));
+  return { sessions, roster };
+}
+
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -58,6 +183,7 @@ export async function upsertUser(user: InsertUser): Promise<void> {
 }
 
 export async function getUserByOpenId(openId: string) {
+  if (isDemoMode() && openId === demoUser.openId) return demoUser;
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(users).where(eq(users.openId, openId)).limit(1);

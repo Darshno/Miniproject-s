@@ -17,6 +17,11 @@ import {
   getCurrentStudent,
   ensureUserProfile,
   ensureDemoData,
+  getDemoActivities,
+  getDemoAdminData,
+  getDemoAttendance,
+  getDemoOverview,
+  isDemoMode,
   notifications,
   students,
   subjects,
@@ -65,7 +70,12 @@ function analysis(attended: number, total: number, threshold: number) {
   return { current, required, safeMisses };
 }
 
+function assertWritable() {
+  if (isDemoMode()) throw new TRPCError({ code: "FORBIDDEN", message: "Demo mode is read-only. Editing is disabled." });
+}
+
 async function getOverview(user: User) {
+  if (isDemoMode()) return getDemoOverview();
   const db = await ensureDemoData();
   if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: "Database is not available." });
   await ensureUserProfile(user);
@@ -160,8 +170,9 @@ export const appRouter = router({
     overview: protectedProcedure.query(({ ctx }) => getOverview(ctx.user)),
   }),
   settings: router({
-    get: protectedProcedure.query(() => getAttendancePolicy()),
+    get: protectedProcedure.query(() => isDemoMode() ? { threshold: 75, lateCountsAsPresent: true } : getAttendancePolicy()),
     update: adminProcedure.input(z.object({ threshold: z.number().int().min(1).max(100), lateCountsAsPresent: z.boolean() })).mutation(async ({ input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       await db.update(appSettings).set({ attendanceThreshold: input.threshold, lateCountsAsPresent: input.lateCountsAsPresent ? 1 : 0 });
@@ -170,6 +181,10 @@ export const appRouter = router({
   }),
   attendance: router({
     list: protectedProcedure.input(z.object({ subjectId: z.number().optional(), studentId: z.number().optional() }).optional()).query(async ({ ctx, input }) => {
+      if (isDemoMode()) {
+        const demo = getDemoAttendance();
+        return demo.sessions.filter(session => !input?.subjectId || session.subjectId === input.subjectId);
+      }
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const current = await getCurrentStudent(ctx.user.id);
@@ -192,6 +207,7 @@ export const appRouter = router({
       return sessionRows.filter(session => (!input?.subjectId || session.subjectId === input.subjectId) && (!visibleSessionIds || visibleSessionIds.has(session.subjectId))).map(session => ({ ...session, subject: subjectRows.find(subject => subject.id === session.subjectId)?.name ?? "Subject", record: recordRows.find(record => record.sessionId === session.id) ?? null }));
     }),
     roster: facultyProcedure.input(z.object({ sessionId: z.number().int().positive() })).query(async ({ ctx, input }) => {
+      if (isDemoMode()) return getDemoAttendance().roster;
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const session = await assertFacultyOwnsSession(db, ctx.user, input.sessionId);
@@ -200,6 +216,7 @@ export const appRouter = router({
       return roster.map(student => ({ ...student, status: records.find(record => record.studentId === student.studentId)?.status ?? null }));
     }),
     createSession: facultyProcedure.input(z.object({ subjectId: z.number().int().positive(), sessionDate: z.string().min(8), sessionTime: z.string().min(4), section: z.string().min(1).max(20).default("A") })).mutation(async ({ ctx, input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const facultyId = await assertFacultyOwnsSubject(db, ctx.user, input.subjectId);
@@ -210,6 +227,7 @@ export const appRouter = router({
       return { id: inserted[0]?.id, existing: false };
     }),
     saveRecords: facultyProcedure.input(z.object({ sessionId: z.number().int().positive(), records: z.array(z.object({ studentId: z.number().int().positive(), status: z.enum(["present", "absent", "late"]) })) })).mutation(async ({ ctx, input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const session = await assertFacultyOwnsSession(db, ctx.user, input.sessionId);
@@ -229,6 +247,7 @@ export const appRouter = router({
   }),
   activities: router({
     list: protectedProcedure.input(z.object({ search: z.string().optional(), category: z.string().optional() }).optional()).query(async ({ ctx, input }) => {
+      if (isDemoMode()) return getDemoActivities(input);
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const rows = await db.select().from(activities).orderBy(asc(activities.startsAt));
@@ -237,6 +256,7 @@ export const appRouter = router({
       return rows.filter(row => !input?.search || row.title.toLowerCase().includes(input.search.toLowerCase())).filter(row => !input?.category || row.category === input.category).map(row => ({ ...row, registrations: regs.filter(reg => reg.activityId === row.id).length, registered: Boolean(current && regs.some(reg => reg.activityId === row.id && reg.studentId === current.id)), availableSeats: Math.max(0, row.capacity - regs.filter(reg => reg.activityId === row.id).length) }));
     }),
     register: protectedProcedure.input(z.object({ activityId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      assertWritable();
       if (ctx.user.role !== "student") throw new TRPCError({ code: "FORBIDDEN", message: "Only students can register for activities." });
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
@@ -253,6 +273,7 @@ export const appRouter = router({
       return { ok: true };
     }),
     cancel: protectedProcedure.input(z.object({ activityId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const current = await getCurrentStudent(ctx.user.id);
@@ -264,6 +285,7 @@ export const appRouter = router({
       return { ok: true };
     }),
     create: facultyProcedure.input(z.object({ title: z.string().min(3), description: z.string().min(10), category: z.enum(["Workshop", "Seminar", "Hackathon", "Competition", "Guest lecture", "Club", "Cultural", "Sports"]), startsAt: z.string(), venue: z.string().min(2), registrationDeadline: z.string(), capacity: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const f = (await getCurrentFaculty(ctx.user.id)) ?? (ctx.user.role === "admin" ? (await db.select().from(faculty).limit(1))[0] : undefined);
@@ -278,6 +300,7 @@ export const appRouter = router({
   }),
   notifications: router({
     markRead: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       await db.update(notifications).set({ isRead: 1 }).where(and(eq(notifications.id, input.id), eq(notifications.userId, ctx.user.id)));
@@ -286,6 +309,10 @@ export const appRouter = router({
   }),
   admin: router({
     students: adminProcedure.input(z.object({ search: z.string().optional() }).optional()).query(async ({ input }) => {
+      if (isDemoMode()) {
+        const search = input?.search?.trim().toLowerCase();
+        return getDemoAdminData().students.filter(student => !search || student.name.toLowerCase().includes(search) || student.rollNumber.toLowerCase().includes(search));
+      }
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const rows = await db.select().from(students).orderBy(asc(students.rollNumber));
@@ -296,6 +323,7 @@ export const appRouter = router({
       });
     }),
     faculty: adminProcedure.query(async () => {
+      if (isDemoMode()) return getDemoAdminData().faculty;
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const rows = await db.select().from(faculty);
@@ -303,11 +331,13 @@ export const appRouter = router({
       return rows.map(row => ({ ...row, name: allUsers.find(user => user.id === row.userId)?.name ?? "Faculty" }));
     }),
     departments: adminProcedure.query(async () => {
+      if (isDemoMode()) return getDemoAdminData().departments;
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       return db.select().from(departments).orderBy(asc(departments.name));
     }),
     studentEnrollments: adminProcedure.input(z.object({ studentId: z.number().int().positive() })).query(async ({ input }) => {
+      if (isDemoMode()) return getDemoAdminData().enrollments.filter(item => item.studentId === input.studentId);
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const rows = await db.select().from(enrolments).where(eq(enrolments.studentId, input.studentId));
@@ -323,6 +353,7 @@ export const appRouter = router({
       });
     }),
     addEnrollment: adminProcedure.input(z.object({ studentId: z.number().int().positive(), subjectId: z.number().int().positive() })).mutation(async ({ input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const [student, subject] = await Promise.all([
@@ -336,12 +367,14 @@ export const appRouter = router({
       return { ok: true };
     }),
     removeEnrollment: adminProcedure.input(z.object({ studentId: z.number().int().positive(), subjectId: z.number().int().positive() })).mutation(async ({ input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       await db.delete(enrolments).where(and(eq(enrolments.studentId, input.studentId), eq(enrolments.subjectId, input.subjectId)));
       return { ok: true };
     }),
     assignments: adminProcedure.query(async () => {
+      if (isDemoMode()) return getDemoAdminData().assignments;
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const [subjectRows, assignmentRows, facultyRows, facultyUsers] = await Promise.all([
@@ -359,6 +392,7 @@ export const appRouter = router({
       }));
     }),
     setAssignment: adminProcedure.input(z.object({ subjectId: z.number().int().positive(), facultyId: z.number().int().positive(), section: z.string().min(1).max(20).default("A") })).mutation(async ({ input }) => {
+      assertWritable();
       const db = await ensureDemoData();
       if (!db) throw new TRPCError({ code: "SERVICE_UNAVAILABLE" });
       const [subject, facultyProfile] = await Promise.all([

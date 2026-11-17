@@ -14,16 +14,15 @@ export async function createContext(
 ): Promise<TrpcContext> {
   let user: User | null = null;
 
-  try {
-    user = await sdk.authenticateRequest(opts.req);
-  } catch (error) {
-    // Authentication is optional for public procedures.
-    user = null;
-  }
-
-  if (!user && process.env.DEMO_MODE === "true") {
-    await db.ensureDemoData();
-    user = (await db.getUserByOpenId("demo-admin-001")) ?? null;
+  if (process.env.DEMO_MODE === "true") {
+    user = db.demoUser;
+  } else {
+    try {
+      user = await sdk.authenticateRequest(opts.req);
+    } catch (error) {
+      // Authentication is optional for public procedures.
+      user = null;
+    }
   }
 
   return {
